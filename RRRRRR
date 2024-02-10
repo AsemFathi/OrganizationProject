@@ -1,0 +1,62 @@
+package main
+
+import (
+	"errors"
+	"net/http"
+	"github.com/gin-gonic/gin"
+)
+
+type userData struct {
+	Name     string `json"name"`
+	Email    string `json"email"`
+	Password string `json"password"`
+}
+
+var users = []userData{
+	{Name: "Asem Fathi", Email: "Asem@gmail.com", Password: "123456"},
+	{Name: "Ahmed", Email: "Ahmed@gmail.com", Password: "123456"},
+	{Name: "Mohamed", Email: "Mohamed@gmail.com", Password: "123456"},
+}
+
+func signUp(context *gin.Context) {
+	var newUser userData
+
+	if err := context.BindJSON(&newUser); err != nil {
+		return
+	}
+
+	error := checkUserData(newUser.Email, newUser.Password)
+	if error != nil {
+		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": error.Error()})
+		return
+	}
+
+	users = append(users, newUser)
+
+	context.IndentedJSON(http.StatusCreated, newUser)
+}
+
+func checkUserData(email string, password string) error {
+	//check  if mail is existed
+	for i := range users {
+		if users[i].Email == email {
+			return errors.New("Email is existed")
+		}
+	}
+	return nil
+}
+
+func getUsers(context *gin.Context) {
+	context.IndentedJSON(http.StatusOK, users)
+}
+
+func main() {
+
+	router := gin.Default()
+
+	router.POST("/signup", signUp)
+	router.GET("/signup", getUsers)
+
+	router.Run("localhost:8080")
+
+}
