@@ -7,6 +7,6 @@ import (
 )
 
 func AUTHRoutes(incomingRoutes *gin.Engine) {
-	incomingRoutes.POST("users/signup", controller.Signup())
-	incomingRoutes.POST("users/login", controller.Login())
+	incomingRoutes.POST("/signup", controller.Signup())
+	incomingRoutes.POST("/login", controller.Login())
 }
