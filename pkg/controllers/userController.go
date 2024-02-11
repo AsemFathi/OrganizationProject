@@ -18,6 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -66,41 +67,44 @@ func Signup() gin.HandlerFunc {
 
 		count, err := userCollection.CountDocuments(ctx, bson.M{"email": user.Email})
 		defer cancel()
+
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error occurred while checking for the email"})
 			log.Fatalln("Error occurred while checking for the email")
-
 			return
 		}
-		password := HashPassword(*user.Password)
-		user.Password = &password
+
 		if count > 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "this email is already exist"})
 			return
 		}
 
+		var user_type = "USER"
+		password := HashPassword(*user.Password)
+		user.Password = &password
 		user.Created_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.Updated_at, _ = time.Parse(time.RFC3339, time.Now().Format(time.RFC3339))
 		user.ID = primitive.NewObjectID()
 		user.User_id = user.ID.Hex()
-		token, refreshtoken, _ := helper.GenerateAllTokens(*user.Email, *user.Name, *user.User_type, *&user.User_id)
+		user.User_type = &user_type
+
+		token, refreshtoken, _ := helper.GenerateAllTokens(*user.User_type, *&user.User_id)
 		user.Token = &token
 		user.Refresh_token = &refreshtoken
 
-		resultInsertionNumber, insertErr := userCollection.InsertOne(ctx, user)
+		_, insertErr := userCollection.InsertOne(ctx, user)
 		if insertErr != nil {
 			msg := fmt.Sprintf("User item was not created")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 			return
 		}
 		defer cancel()
-		c.JSON(http.StatusOK, resultInsertionNumber)
-
+		c.JSON(http.StatusOK, gin.H{"message": "User created successfully"})
 	}
 }
 
-func Login() gin.HandlerFunc {
+func Signin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		var user models.User
@@ -129,7 +133,7 @@ func Login() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found"})
 		}
 
-		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.Email, *foundUser.Name, *foundUser.User_type, *&foundUser.User_id)
+		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.User_type, *&foundUser.User_id)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
 		err = userCollection.FindOne(ctx, bson.M{"user_id": foundUser.User_id}).Decode(&foundUser)
@@ -138,7 +142,8 @@ func Login() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, foundUser)
+
+		c.JSON(http.StatusOK, gin.H{"message": "Logged in successfully", "access_token": &token, "refresh_token": &refreshToken})
 
 	}
 }
@@ -149,7 +154,9 @@ func GetUsers() gin.HandlerFunc {
 			return
 		}
 
-		cursor, err := userCollection.Find(context.Background(), bson.M{})
+		projection := bson.M{"password": 0, "refresh_token": 0, "token": 0}
+
+		cursor, err := userCollection.Find(context.Background(), bson.M{}, options.Find().SetProjection(projection))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "error occurred while finding users"})
 			return

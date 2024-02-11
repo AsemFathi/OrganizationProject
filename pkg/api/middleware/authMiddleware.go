@@ -4,21 +4,24 @@ import (
 	helper "example/STRUCTURE/pkg/utils"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func Authinticate() gin.HandlerFunc {
+func Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		clientToken := c.Request.Header.Get("token")
 
 		if clientToken == "" {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("No Autherization header provides")})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("No Authorization header provides")})
 			c.Abort()
 			return
 		}
 
-		claims, err := helper.ValidateToken(clientToken)
+		token := strings.SplitAfter(clientToken, " ")[1]
+
+		claims, err := helper.ValidateToken(token)
 
 		if err != "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})

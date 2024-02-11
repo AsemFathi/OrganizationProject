@@ -7,9 +7,6 @@ import (
 	"log"
 	"time"
 
-	"crypto/rand"
-	"encoding/base64"
-
 	jwt "github.com/dgrijalva/jwt-go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -31,30 +28,12 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-func GenerateSecretKey() string {
-
-	b := make([]byte, 32)
-
-	_, err := rand.Read(b)
-
-	if err != nil {
-
-		log.Fatal(err)
-
-	}
-
-	return base64.StdEncoding.EncodeToString(b)
-
-}
-
 var userCollection *mongo.Collection = database.OpenConnection(database.Client, "user")
 
-var SECRET_KEY string = GenerateSecretKey()
+var SECRET_KEY string = "WnT48JtnVEs2oWGmjyR1hThcpmMX5tXK"
 
-func GenerateAllTokens(email string, name string, userType string, uid string) (signedToken string, signedRefreshToken string, err error) {
+func GenerateAllTokens(userType string, uid string) (signedToken string, signedRefreshToken string, err error) {
 	claims := &SignedDetails{
-		Email:     email,
-		Name:      name,
 		Uid:       uid,
 		User_type: userType,
 		StandardClaims: jwt.StandardClaims{
