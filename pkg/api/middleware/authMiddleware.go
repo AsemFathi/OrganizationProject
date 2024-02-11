@@ -12,8 +12,9 @@ import (
 func Authenticate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		clientToken := c.Request.Header.Get("Authorization")
+		hasPrefix := strings.HasPrefix(clientToken, "Bearer")
 
-		if clientToken == "" {
+		if clientToken == "" || !hasPrefix {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("No Authorization header provides")})
 			c.Abort()
 			return
