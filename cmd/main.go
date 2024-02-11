@@ -1,6 +1,7 @@
 package main
 
 import (
+	"example/STRUCTURE/pkg/api/middleware"
 	routes "example/STRUCTURE/pkg/api/routes"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,9 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 	routes.AUTHRoutes(router)
+
+	router.Use(middleware.Authenticate())
+
 	routes.UserRoutes(router)
 	routes.OrganizationRoutes(router)
 	router.Run(":" + port)
