@@ -129,10 +129,6 @@ func Signin() gin.HandlerFunc {
 			return
 		}
 
-		if foundUser.Email != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "user not found"})
-		}
-
 		token, refreshToken, _ := helper.GenerateAllTokens(*foundUser.User_type, *&foundUser.User_id)
 
 		helper.UpdateAllTokens(token, refreshToken, foundUser.User_id)
@@ -185,7 +181,8 @@ func GetUser() gin.HandlerFunc {
 
 		var user models.User
 
-		err := userCollection.FindOne(ctx, bson.M{"user_id": userId}).Decode(&user)
+		projection := bson.M{"password": 0, "refresh_token": 0, "token": 0}
+		err := userCollection.FindOne(ctx, bson.M{"user_id": userId}, options.FindOne().SetProjection(projection)).Decode(&user)
 		defer cancel()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -209,6 +206,7 @@ func GetUserFromDatabase(user_id string) (models.User, error) {
 
 	return user, nil
 }
+
 func RefreshToken() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var reqBody struct {

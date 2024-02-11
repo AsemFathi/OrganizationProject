@@ -5,7 +5,7 @@ import (
 	"example/STRUCTURE/pkg/database/mongodb/models"
 	database "example/STRUCTURE/pkg/database/mongodb/repository"
 	helper "example/STRUCTURE/pkg/utils"
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -39,17 +39,25 @@ func CreateOrganization() gin.HandlerFunc {
 				return
 			}
 
-			// Convert the user ID string to an ObjectID value
-			userId, err := StringToObjectID(userIdString)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
 			// Set the user ID on the organization object
-			org.ID = userId
+			org.Created_By = userIdString
 		}
 
+		org.ID = primitive.NewObjectID()
+		org.Org_ID = org.ID.Hex()
+
+		//add the user who create it to its members
+
+		var userCollection *mongo.Collection = database.OpenConnection(database.Client, "user")
+
+		var user models.User
+		userCollection.FindOne(context.Background(), bson.M{"user_id": org.Created_By}).Decode(&user)
+
+		var member models.InviteUserRequest
+		member.UserID = org.Created_By
+		member.Role = *user.User_type
+		member.UserEmail = *user.Email
+		org.Members = append(org.Members, member)
 		// Insert the organization document into the database
 		result, err := organizationCollection.InsertOne(context.Background(), org)
 		if err != nil {
@@ -91,7 +99,7 @@ func GetOrganization() gin.HandlerFunc {
 
 		var org models.Organization
 
-		err := organizationCollection.FindOne(ctx, bson.M{"org_id": orgId}).Decode(&org)
+		err := organizationCollection.FindOne(ctx, bson.M{"organization_id": orgId}).Decode(&org)
 		defer cancel()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -124,6 +132,7 @@ func UpdateOrganization() gin.HandlerFunc {
 		// Get the organization ID from the URL path parameter
 		organizationID := c.Param("org_id")
 
+		var org models.Organization
 		// Parse the organization ID as a MongoDB ObjectID
 		id, err := primitive.ObjectIDFromHex(organizationID)
 		if err != nil {
@@ -144,16 +153,11 @@ func UpdateOrganization() gin.HandlerFunc {
 			}
 
 			// Convert the user ID string to an ObjectID value
-			userId, err := StringToObjectID(userIdString)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			fmt.Println(userId)
+			org.Created_By = userIdString
+
 		}
 
 		// Parse the request body as an Organization object
-		var org models.Organization
 		if err := c.ShouldBindJSON(&org); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -184,7 +188,7 @@ func UpdateOrganization() gin.HandlerFunc {
 		}
 
 		// Return the updated organization object
-		c.JSON(http.StatusOK, org)
+		c.JSON(http.StatusOK, gin.H{"organization_id": org.ID, "name": org.Name, "description": org.Description})
 	}
 }
 
@@ -192,7 +196,7 @@ func DeleteOrganization() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		// Get the organization ID from the URL path parameter
-		organizationID := c.Param("organization_id")
+		organizationID := c.Param("org_id")
 
 		// Parse the organization ID as a MongoDB ObjectID
 		id, err := primitive.ObjectIDFromHex(organizationID)
@@ -219,10 +223,11 @@ func DeleteOrganization() gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
+			log.Printf(userId.String())
 
 			// Check if the user is the owner of the organization
 			var org models.Organization
-			err = organizationCollection.FindOne(context.Background(), bson.M{"_id": id, "owner_id": userId}).Decode(&org)
+			err = organizationCollection.FindOne(context.Background(), bson.M{"_id": id, "created_by": userIdString}).Decode(&org)
 			if err != nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "User is not the owner of the organization"})
 				return
@@ -265,28 +270,37 @@ func InviteUserToOrganization() gin.HandlerFunc {
 
 		var organization models.Organization
 
-		err := organizationCollection.FindOne(context.Background(), bson.M{"_id": orgId}).Decode(&organization)
+		err := organizationCollection.FindOne(context.Background(), bson.M{"organization_id": orgId}).Decode(&organization)
 
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
 			return
 		}
+		// get user data from database
+		var userCollection *mongo.Collection = database.OpenConnection(database.Client, "user")
+
+		var user models.User
+		err = userCollection.FindOne(context.Background(), bson.M{"email": inviteUserRequest.UserEmail}).Decode(&user)
+
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
 
 		// Check if the user is already a member of the organization
 		for _, member := range organization.Members {
-			if member.UserID == inviteUserRequest.UserID {
+			if member.UserID == user.User_id {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "user is already a member of the organization"})
 				return
 			}
 		}
 
+		log.Println("user id", user.User_id)
 		// Update the organization document in the database
 		result, err := organizationCollection.UpdateOne(
 			context.Background(),
-			bson.M{"_id": orgId},
-			bson.D{
-				{Key: "$push", Value: bson.D{{Key: "members", Value: bson.D{{Key: "user_id", Value: inviteUserRequest.UserID}, {Key: "role", Value: inviteUserRequest.Role}}}}},
-			},
+			bson.M{"organization_id": orgId},
+			bson.D{{Key: "$push", Value: bson.M{"organization_members": bson.M{"user_id": user.User_id, "access_level": user.User_type, "user_email": user.Email}}}},
 		)
 
 		if err != nil {
@@ -296,11 +310,11 @@ func InviteUserToOrganization() gin.HandlerFunc {
 
 		// Check if the user was invited to the organization
 		if result.MatchedCount == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "organization not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "was invited"})
 			return
 		}
 
 		// Return the updated organization object
-		c.JSON(http.StatusOK, organization)
+		c.JSON(http.StatusOK, gin.H{"message": "User invited successfully"})
 	}
 }

@@ -16,7 +16,7 @@ func main() {
 
 	router.Use(middleware.Authenticate())
 
-	routes.UserRoutes(router)
 	routes.OrganizationRoutes(router)
+	routes.UserRoutes(router)
 	router.Run(":" + port)
 }

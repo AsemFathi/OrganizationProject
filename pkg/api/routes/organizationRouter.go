@@ -12,4 +12,5 @@ func OrganizationRoutes(incomingRoutes *gin.Engine) {
 	incomingRoutes.GET("/organization/:org_id", controller.GetOrganization())
 	incomingRoutes.PUT("/organization/:org_id", controller.UpdateOrganization())
 	incomingRoutes.DELETE("/organization/:org_id", controller.DeleteOrganization())
+	incomingRoutes.POST("/organization/:org_id/invite", controller.InviteUserToOrganization())
 }

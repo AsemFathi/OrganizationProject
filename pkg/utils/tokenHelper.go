@@ -5,6 +5,7 @@ import (
 	database "example/STRUCTURE/pkg/database/mongodb/repository"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
@@ -60,6 +61,7 @@ func GenerateAllTokens(userType string, uid string) (signedToken string, signedR
 
 func ValidateToken(signedToken string) (claims *SignedDetails, msg string) {
 	token, err := jwt.ParseWithClaims(
+
 		signedToken,
 		&SignedDetails{},
 		func(token *jwt.Token) (interface{}, error) {
@@ -68,20 +70,20 @@ func ValidateToken(signedToken string) (claims *SignedDetails, msg string) {
 	)
 	if err != nil {
 		msg = err.Error()
-		return
+		return nil, err.Error()
 	}
 
 	claims, ok := token.Claims.(*SignedDetails)
 	if !ok {
 		msg = fmt.Sprintf("The token is invalid")
 		msg = err.Error()
-		return
+		return nil, msg
 	}
 
 	if claims.ExpiresAt < time.Now().Unix() {
 		msg = fmt.Sprintf("token is expired")
 		msg = err.Error()
-		return
+		return nil, msg
 	}
 
 	return claims, msg
@@ -124,20 +126,20 @@ func UpdateAllTokens(signedToken string, signedRefreshToken string, userId strin
 
 func VerifyToken(tokenString string) (string, error) {
 
-	claims := &Claims{}
+	hasPrefix := strings.HasPrefix(tokenString, "Bearer")
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-
-		return SECRET_KEY, nil
-
-	})
-
-	if err != nil || !token.Valid {
-
-		return "", err
-
+	if tokenString == "" || !hasPrefix {
+		return "", fmt.Errorf("invalid token format")
 	}
 
-	return claims.UserID, nil
+	token := strings.SplitAfter(tokenString, " ")[1]
+
+	claims, err := ValidateToken(token)
+
+	if err != "" {
+		return "", fmt.Errorf(err)
+	}
+
+	return claims.Uid, nil
 
 }
